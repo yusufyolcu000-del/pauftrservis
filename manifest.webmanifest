@@ -1,0 +1,18 @@
+{
+  "name": "Servis Listesi",
+  "short_name": "Servis",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#e9edf1",
+  "theme_color": "#0f2a33",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='96' fill='%230f2a33'/%3E%3Cg fill='none' stroke='%234fd0c4' stroke-width='26' stroke-linecap='round'%3E%3Crect x='140' y='96' width='232' height='320' rx='24'/%3E%3Cpath d='M196 184h120M196 256h120M196 328h72'/%3E%3C/g%3E%3C/svg%3E",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
