@@ -115,6 +115,7 @@ body[data-tab="is"] .filters .segs{display:none}
 .editor{max-width:860px;margin:0 auto;padding:18px 16px 80px}
 .ed-head{display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap}
 .ed-head h1{font-size:22px;margin:0;font-weight:700;letter-spacing:-.02em}
+.ed-sub{color:var(--ink-2);font-size:14.5px;margin:-8px 0 14px}
 .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:15px;margin-bottom:12px;box-shadow:var(--shadow)}
 .sechead{font-size:12px;font-weight:700;color:var(--accent);margin:0 0 11px;letter-spacing:.06em;display:flex;align-items:center;gap:8px}
 .sechead .spacer{flex:1}
@@ -150,7 +151,8 @@ details.neuro summary{cursor:pointer;font-size:13px;font-weight:600;color:var(--
 .vizit .vnav .btn{flex:1;padding:12px}
 .vw{max-width:780px;margin:0 auto;font-size:17px}
 .vw h2{font-size:25px;margin:0 0 2px;letter-spacing:-.02em}
-.vw .alt{color:var(--ink-2);margin-bottom:14px}
+.vw .alt{color:var(--ink);font-weight:600;font-size:18px;margin-top:4px}
+.vw .alt-sub{color:var(--ink-3);font-weight:400;font-size:15px;margin:2px 0 14px}
 .vw section{margin-bottom:12px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:13px;box-shadow:var(--shadow)}
 .vw h3{font-size:11.5px;letter-spacing:.07em;color:var(--accent);font-weight:700;margin:0 0 6px}
 .vw p{margin:0;white-space:pre-wrap}
@@ -158,6 +160,10 @@ details.neuro summary{cursor:pointer;font-size:13px;font-weight:600;color:var(--
 .vw dl{margin:0;display:grid;grid-template-columns:max-content 1fr;gap:4px 14px}
 .vw dt{color:var(--ink-3);font-size:14.5px}
 .vw dd{margin:0}
+.vnote textarea{font-size:16px;margin-bottom:8px}
+.vnote-row{display:flex;justify-content:flex-end;margin-bottom:6px}
+.vnote .blok{margin-top:10px}
+.vw .iitem span{font-size:16.5px}
 
 .sheet{position:fixed;inset:0;background:rgba(10,20,28,.4);z-index:80;display:none;align-items:flex-end;justify-content:center}
 .sheet.on{display:flex}
@@ -296,7 +302,7 @@ var SUPABASE_ANON_KEY = "sb_publishable_q4tSNrO2uMxRaeP04XJpFQ_k_mfxpTY";
 
 var $ = function(i){ return document.getElementById(i); };
 var sb=null, user=null, rows=[], currentId=null, draft=null, isNew=false;
-var saveTimer=null, signUpMode=false, durumFilt="yatan", vizitIdx=0, lastErr="", tab="hasta";
+var saveTimer=null, signUpMode=false, durumFilt="yatan", vizitIdx=0, lastErr="", tab="hasta", vNote={};
 var CK="", OK_="";
 
 /* ---------- form tanımı ---------- */
@@ -322,7 +328,30 @@ function uid(){
 }
 function today(){ var d=new Date(); d.setMinutes(d.getMinutes()-d.getTimezoneOffset()); return d.toISOString().slice(0,10); }
 function trDate(s){ if(!s) return ""; var p=String(s).slice(0,10).split("-"); return p.length===3?p[2]+"."+p[1]+"."+p[0]:s; }
-function gun(s){ if(!s) return ""; var d=Math.floor((new Date(today()+"T00:00:00")-new Date(s+"T00:00:00"))/86400000)+1; return d>0?d+". gün":""; }
+/* Resmi tatiller: sabit günler her yıl; dini bayramlar yıl yıl */
+var TATIL_SABIT=["01-01","04-23","05-01","05-19","07-15","08-30","10-29"];
+var TATIL_TARIH={"2026-03-20":1,"2026-03-21":1,"2026-03-22":1,"2026-05-27":1,"2026-05-28":1,"2026-05-29":1,"2026-05-30":1};
+function iso(d){ var m=d.getMonth()+1, g=d.getDate(); return d.getFullYear()+"-"+(m<10?"0":"")+m+"-"+(g<10?"0":"")+g; }
+function bitis(n){ return (n.durum==="taburcu" && n.taburcu_tarihi) ? n.taburcu_tarihi : today(); }
+function gunSayi(n){
+  if(!n.yatis_tarihi) return 0;
+  var d=Math.round((new Date(bitis(n)+"T12:00:00")-new Date(n.yatis_tarihi+"T12:00:00"))/86400000)+1;
+  return d>0?d:0;
+}
+function seansSayi(n){
+  var a=A(n), bas=a.ftr_baslangic||n.yatis_tarihi; if(!bas) return 0;
+  var d=new Date(bas+"T12:00:00"), son=new Date(bitis(n)+"T12:00:00"), c=0, guard=0;
+  while(d<=son && guard<2000){
+    var w=d.getDay(), k=iso(d);
+    if(w!==0 && w!==6 && !TATIL_TARIH[k] && TATIL_SABIT.indexOf(k.slice(5))<0) c++;
+    d.setDate(d.getDate()+1); guard++;
+  }
+  c+= parseInt(a.seans_duz,10)||0;
+  return c>0?c:0;
+}
+function gun(s){ if(!s) return ""; var d=Math.round((new Date(today()+"T12:00:00")-new Date(s+"T12:00:00"))/86400000)+1; return d>0?d+". gün":""; }
+function gunTxt(n){ var g=gunSayi(n); return g?g+". gün":""; }
+function seansTxt(n){ var s=seansSayi(n); return s?s+". seans":""; }
 function clone(o){ return JSON.parse(JSON.stringify(o)); }
 function A(n){ return (n && n.anamnez && typeof n.anamnez==="object") ? n.anamnez : {}; }
 
@@ -431,7 +460,7 @@ function onRemote(p){
     if(currentId===row.id&&draft&&!dirty()){ draft=prep(clone(p.new)); renderEditor(true); }
   }
   sortRows(); cacheSet(rows); render();
-  if($("vizit").classList.contains("on")) renderVizit();
+  if($("vizit").classList.contains("on") && document.activeElement && document.activeElement.id!=="vNoteTa") renderVizit(true);
 }
 function setSync(t,cls){
   var s=$("sync"), n=obGet().length;
@@ -574,9 +603,9 @@ function render(){
     var o=document.createElement("span"); o.className="oda"; o.textContent=n.oda||"—";
     var k=document.createElement("span"); k.className="kim";
     k.textContent=[n.hasta_kodu,(n.yas?n.yas:"")+(n.cinsiyet?"/"+n.cinsiyet:"")].filter(Boolean).join(" ");
-    var g=document.createElement("span"); g.className="gun"; g.textContent=n.durum==="taburcu"?"taburcu":gun(n.yatis_tarihi);
+    var g=document.createElement("span"); g.className="gun"; g.textContent=n.durum==="taburcu"?"taburcu":gunTxt(n);
     l1.appendChild(o); l1.appendChild(k); l1.appendChild(g);
-    var l2=document.createElement("div"); l2.className="l2"; l2.textContent=n.tani||A(n).sikayet||"—";
+    var l2=document.createElement("div"); l2.className="l2"; l2.textContent=[n.tani||A(n).sikayet||"—",(n.durum||"yatan")==="yatan"?seansTxt(n):""].filter(Boolean).join("  ·  ");
     var l3=document.createElement("div"); l3.className="l3";
     var bi=bekleyen(n), bk=bekKons(n);
     if(bi){ var t1=document.createElement("span"); t1.className="tag bek"; t1.textContent=bi+" iş"; l3.appendChild(t1); }
@@ -655,12 +684,12 @@ function field(label,key,type,opts){
     el=document.createElement("textarea"); el.value=cur||""; el.rows=opts.rows||2;
   }else{
     el=document.createElement("input"); el.type=type;
-    if(type==="number"){ el.min=0; el.max=opts.max||120; el.inputMode="numeric"; }
+    if(type==="number"){ if(!opts.neg){ el.min=0; el.max=opts.max||120; el.inputMode="numeric"; } }
     el.value=(cur==null)?"":cur;
   }
   if(opts.ph) el.placeholder=opts.ph;
   el.dataset.f=key;
-  el.addEventListener("input",function(){ tgt()[key]=el.value; queueSave(); if(key==="oda"||key==="hasta_kodu") updTitle(); });
+  el.addEventListener("input",function(){ tgt()[key]=el.value; queueSave(); updTitle(); });
   w.appendChild(l); w.appendChild(el); return w;
 }
 function card(title){
@@ -671,7 +700,11 @@ function card(title){
 }
 function grid(){ var g=document.createElement("div"); g.className="grid"; return g; }
 function g3(){ var g=document.createElement("div"); g.className="g3"; return g; }
-function updTitle(){ var h=document.querySelector(".ed-head h1"); if(h) h.textContent=(draft.oda?draft.oda+" · ":"")+(draft.hasta_kodu||"Yeni hasta"); }
+function updTitle(){
+  var h=document.querySelector(".ed-head h1"); if(h) h.textContent=(draft.oda?draft.oda+" · ":"")+(draft.hasta_kodu||"Yeni hasta");
+  var s=document.getElementById("edSub");
+  if(s){ var n=payload(draft); s.textContent=[seansTxt(n),gunTxt(n),n.yatis_tarihi?"yatış "+trDate(n.yatis_tarihi):""].filter(Boolean).join("  ·  "); }
+}
 
 /* tarihli blok listesi (görüntüleme, lab, vizit) */
 function blokListe(getArr,title,opts){
@@ -727,6 +760,7 @@ function renderEditor(keepScroll){
   var del=document.createElement("button"); del.className="btn sm danger"; del.textContent="Sil"; del.onclick=removeRow;
   head.appendChild(tb); head.appendChild(del);
   wrap.appendChild(head);
+  var sub=document.createElement("div"); sub.id="edSub"; sub.className="ed-sub"; wrap.appendChild(sub);
 
   /* künye */
   var c1=card("KÜNYE"), g=grid();
@@ -805,6 +839,12 @@ function renderEditor(keepScroll){
 
   /* tedavi süreci */
   var c5=card("TEDAVİ SÜRECİ"), g9=grid();
+  var fb=field("FTR başlangıç","ftr_baslangic","date",{a:1,cls:"half"});
+  var sd=field("Seans düzeltme (±)","seans_duz","number",{a:1,cls:"half",neg:1,ph:"0"});
+  g9.appendChild(fb); g9.appendChild(sd);
+  var sh=document.createElement("div"); sh.className="hint full"; sh.style.gridColumn="1/-1"; sh.style.marginTop="-2px";
+  sh.textContent="Seans, FTR başlangıcından (boşsa yatış tarihinden) bugüne kadarki hafta içi günlerden hesaplanır; resmi tatiller düşülür. Yapılamayan seans için düzeltmeye -1, -2 yaz.";
+  g9.appendChild(sh);
   g9.appendChild(field("FTR programı","ftr_program","textarea",{cls:"half",rows:3,ph:"Modalite, seans"}));
   g9.appendChild(field("Yapılan işlemler","islemler","textarea",{cls:"half",rows:3}));
   c5.appendChild(g9); wrap.appendChild(c5);
@@ -941,19 +981,21 @@ function openVizit(i){
   vizitIdx=Math.max(0,Math.min(i||0,l.length-1));
   $("vizit").classList.add("on"); renderVizit();
 }
-function renderVizit(){
+function renderVizit(keep){
   var l=vizitList(); if(!l.length){ $("vizit").classList.remove("on"); return; }
   if(vizitIdx>=l.length) vizitIdx=l.length-1;
   var n=l[vizitIdx], a=A(n);
   if(!a.hikaye&&n.oyku) a=Object.assign({},a,{hikaye:n.oyku});
   $("vPos").textContent=(vizitIdx+1)+" / "+l.length;
-  var v=$("vBody"); v.innerHTML="";
+  var v=$("vBody"), st0=v.scrollTop; v.innerHTML="";
   var w=document.createElement("div"); w.className="vw";
   var h=document.createElement("h2");
   h.textContent=(n.oda||"—")+"  ·  "+(n.hasta_kodu||"")+(n.yas?"  "+n.yas:"")+(n.cinsiyet?"/"+n.cinsiyet:"");
   var alt=document.createElement("div"); alt.className="alt";
-  alt.textContent=[n.tani,gun(n.yatis_tarihi),n.yatis_tarihi?"yatış "+trDate(n.yatis_tarihi):""].filter(Boolean).join("  ·  ");
-  w.appendChild(h); w.appendChild(alt);
+  alt.textContent=[n.tani,seansTxt(n)].filter(Boolean).join("  ·  ");
+  var alt2=document.createElement("div"); alt2.className="alt alt-sub";
+  alt2.textContent=[gunTxt(n),n.yatis_tarihi?"yatış "+trDate(n.yatis_tarihi):"",n.durum==="taburcu"&&n.taburcu_tarihi?"taburcu "+trDate(n.taburcu_tarihi):""].filter(Boolean).join("  ·  ");
+  w.appendChild(h); if(alt.textContent) w.appendChild(alt); if(alt2.textContent) w.appendChild(alt2);
 
   function sec(title,text,cls){
     if(!text) return;
@@ -962,8 +1004,44 @@ function renderVizit(){
     var p=document.createElement("p"); p.textContent=text; if(cls) p.className=cls;
     s.appendChild(t); s.appendChild(p); w.appendChild(s);
   }
-  var bek=(n.isler||[]).filter(function(i){ return !i.ok; }).map(function(i){ return "☐ "+i.m; }).join("\n");
-  sec("BEKLEYEN İŞLER",bek,"bek");
+  /* bekleyen işler: vizitte işaretlenebilir */
+  var bugun=today();
+  var isl=(n.isler||[]).map(function(it,i){ return {it:it,i:i}; }).filter(function(x){ return !x.it.ok || x.it.d===bugun; });
+  if(isl.length){
+    var si=document.createElement("section");
+    var ti=document.createElement("h3"); ti.textContent="BEKLEYEN İŞLER"; si.appendChild(ti);
+    isl.forEach(function(x){
+      var r=document.createElement("label"); r.className="iitem"+(x.it.ok?" ok":"");
+      var cb=document.createElement("input"); cb.type="checkbox"; cb.checked=!!x.it.ok;
+      cb.onchange=function(){ var c=cb.checked; mutateRow(n.id,function(d){ var t=d.isler[x.i]; if(!t) return; t.ok=c; if(c) t.d=today(); else delete t.d; }); renderVizit(true); };
+      var sp=document.createElement("span"); sp.textContent=x.it.m;
+      r.appendChild(cb); r.appendChild(sp); si.appendChild(r);
+    });
+    w.appendChild(si);
+  }
+
+  /* vizit notu: düzenlemeye girmeden yaz */
+  var sv=document.createElement("section"); sv.className="vnote";
+  var tv=document.createElement("h3"); tv.textContent="VİZİT NOTU"; sv.appendChild(tv);
+  var ta=document.createElement("textarea"); ta.id="vNoteTa"; ta.rows=3; ta.placeholder="Bugünkü vizit notu…";
+  ta.value=vNote[n.id]||"";
+  ta.addEventListener("input",function(){ vNote[n.id]=ta.value; });
+  var row=document.createElement("div"); row.className="vnote-row";
+  var sb2=document.createElement("button"); sb2.className="btn primary"; sb2.textContent="Notu kaydet";
+  sb2.onclick=function(){
+    var v=ta.value.trim(); if(!v) return;
+    mutateRow(n.id,function(d){ d.vizitler.push({t:today(),m:v}); });
+    vNote[n.id]=""; renderVizit(true);
+  };
+  row.appendChild(sb2); sv.appendChild(ta); sv.appendChild(row);
+  var son=(n.vizitler||[]).slice(-4).reverse();
+  son.forEach(function(x){
+    var b=document.createElement("div"); b.className="blok";
+    var d=document.createElement("div"); d.className="d"; d.textContent=trDate(x.t);
+    var m=document.createElement("div"); m.className="m"; m.textContent=x.m;
+    b.appendChild(d); b.appendChild(m); sv.appendChild(b);
+  });
+  w.appendChild(sv);
   sec("ŞİKAYET",a.sikayet);
   sec("HİKAYE",a.hikaye);
   var oz=[a.ozgecmis?"Özgeçmiş: "+a.ozgecmis:"",a.soygecmis?"Soygeçmiş: "+a.soygecmis:""].filter(Boolean).join("\n");
@@ -990,10 +1068,9 @@ function renderVizit(){
   sec("KONSÜLTASYONLAR",k);
   var lb=(n.lablar||[]).slice(-3).reverse().map(function(x){ return trDate(x.t)+"\n"+x.m; }).join("\n\n");
   sec("SON LAB",lb);
-  var vz=(n.vizitler||[]).slice(-4).reverse().map(function(x){ return trDate(x.t)+" — "+x.m; }).join("\n\n");
-  sec("VİZİT NOTLARI",vz);
 
-  v.appendChild(w); v.scrollTop=0;
+
+  v.appendChild(w); v.scrollTop=keep?st0:0;
 }
 $("vizitBtn").onclick=function(){
   var l=vizitList(), i=0;
@@ -1006,7 +1083,7 @@ $("vNext").onclick=function(){ if(vizitIdx<vizitList().length-1){ vizitIdx++; re
 $("vEdit").onclick=function(){ var n=vizitList()[vizitIdx]; if(!n) return; $("vizit").classList.remove("on"); open(n.id); };
 (function(){
   var x0=null, y0=null, b=$("vBody");
-  b.addEventListener("touchstart",function(e){ x0=e.touches[0].clientX; y0=e.touches[0].clientY; },{passive:true});
+  b.addEventListener("touchstart",function(e){ if(e.target.closest("textarea,input,label")){ x0=null; return; } x0=e.touches[0].clientX; y0=e.touches[0].clientY; },{passive:true});
   b.addEventListener("touchend",function(e){
     if(x0===null) return;
     var dx=e.changedTouches[0].clientX-x0, dy=e.changedTouches[0].clientY-y0; x0=null;
@@ -1016,6 +1093,7 @@ $("vEdit").onclick=function(){ var n=vizitList()[vizitIdx]; if(!n) return; $("vi
 })();
 document.addEventListener("keydown",function(e){
   if($("vizit").classList.contains("on")){
+    var ae=document.activeElement; if(ae && /^(TEXTAREA|INPUT)$/.test(ae.tagName)){ if(e.key==="Escape") ae.blur(); return; }
     if(e.key==="ArrowRight") $("vNext").click();
     if(e.key==="ArrowLeft") $("vPrev").click();
     if(e.key==="Escape") $("vClose").click();
