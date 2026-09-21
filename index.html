@@ -119,6 +119,10 @@ body[data-tab="is"] .filters .segs{display:none}
 .editor{max-width:860px;margin:0 auto;padding:18px 16px 80px}
 .ed-head{display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap}
 .ed-head h1{font-size:22px;margin:0;font-weight:700;letter-spacing:-.02em}
+.isbtn{border-color:var(--accent);color:var(--accent);font-weight:600;display:inline-flex;align-items:center;gap:6px}
+.isbtn .cnt{min-width:20px;padding:0 6px;border-radius:999px;background:var(--warn);color:#fff;font-size:12px;line-height:20px;text-align:center}
+@keyframes flash{0%{box-shadow:0 0 0 3px var(--accent)}100%{box-shadow:var(--shadow)}}
+.card.flash{animation:flash 1.4s ease-out}
 .ed-sub{color:var(--ink-2);font-size:14.5px;margin:-8px 0 14px}
 .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:15px;margin-bottom:12px;box-shadow:var(--shadow)}
 .sechead{font-size:12px;font-weight:700;color:var(--accent);margin:0 0 11px;letter-spacing:.06em;display:flex;align-items:center;gap:8px}
@@ -1037,7 +1041,16 @@ function renderEditor(keepScroll){
     queueSave(true); renderEditor(true); render();
   };
   var del=document.createElement("button"); del.className="btn sm danger"; del.textContent="Sil"; del.onclick=removeRow;
-  head.appendChild(tb); head.appendChild(del);
+  var acikIs=(draft.isler||[]).filter(function(x){ return !x.ok; }).length;
+  var ib=document.createElement("button"); ib.className="btn sm isbtn";
+  ib.textContent="İş listesi"; if(acikIs){ var bc=document.createElement("span"); bc.className="cnt"; bc.textContent=acikIs; ib.appendChild(bc); }
+  ib.onclick=function(){
+    var c=$("isCard"), inp=$("isAddInput"); if(!c) return;
+    c.scrollIntoView({behavior:"smooth",block:"center"});
+    c.classList.remove("flash"); void c.offsetWidth; c.classList.add("flash");
+    setTimeout(function(){ if(inp) inp.focus({preventScroll:true}); },350);
+  };
+  head.appendChild(ib); head.appendChild(tb); head.appendChild(del);
   wrap.appendChild(head);
   var sub=document.createElement("div"); sub.id="edSub"; sub.className="ed-sub"; wrap.appendChild(sub);
 
@@ -1197,7 +1210,7 @@ function renderEditor(keepScroll){
   c5.appendChild(g9); wrap.appendChild(c5);
 
   /* bekleyen işler */
-  var c6=card("BEKLEYEN İŞLER");
+  var c6=card("BEKLEYEN İŞLER"); c6.id="isCard";
   draft.isler.forEach(function(it,i){
     var rr=document.createElement("label"); rr.className="is"+(it.ok?" ok":"");
     var cb=document.createElement("input"); cb.type="checkbox"; cb.checked=!!it.ok;
@@ -1208,7 +1221,7 @@ function renderEditor(keepScroll){
     rr.appendChild(cb); rr.appendChild(s); rr.appendChild(rm); c6.appendChild(rr);
   });
   var al=document.createElement("div"); al.className="addline";
-  var ai=document.createElement("input"); ai.type="text"; ai.placeholder="Yeni iş…";
+  var ai=document.createElement("input"); ai.type="text"; ai.placeholder="Yeni iş yaz, Enter…"; ai.id="isAddInput";
   var ab=document.createElement("button"); ab.className="btn sm"; ab.textContent="Ekle";
   var addIs=function(){ var vv=ai.value.trim(); if(!vv) return; draft.isler.push({m:vv,ok:false}); queueSave(true); renderEditor(true); render(); };
   ab.onclick=addIs; ai.addEventListener("keydown",function(e){ if(e.key==="Enter") addIs(); });
