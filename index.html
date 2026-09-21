@@ -595,6 +595,26 @@ function applyTpl(rec,t){
   if(add.length) rec.ozel_test=(normv(rec.ozel_test)?String(rec.ozel_test).replace(/\s+$/,"")+"\n":"")+add.join("\n");
   if(t.neuro) neuroOpen=true;
 }
+/* şablonu geri al: eklediği testleri ve dokunulmamış varsayılan değerleri kaldırır */
+function removeTpl(rec,t){
+  var others=Object.keys(TPL).map(function(k){ return TPL[k]; }).filter(function(o){ return o!==t && tplApplied(rec,o); });
+  var keep={}; others.forEach(function(o){ (o.tests||[]).forEach(function(l){ keep[tplKey(l)]=1; }); });
+  var mine={}; (t.tests||[]).forEach(function(l){ mine[tplKey(l)]=1; });
+  rec.ozel_test=String(rec.ozel_test||"").split("\n").filter(function(l){
+    if(!l.trim()) return false; var k=tplKey(l); return !mine[k] || keep[k];
+  }).join("\n");
+  Object.keys(t.base||{}).forEach(function(k){
+    if(normv(rec[k])!==normv(t.base[k])) return;
+    var yedek=null; others.forEach(function(o){ if(yedek===null && o.base && normv(o.base[k])) yedek=o.base[k]; });
+    rec[k]=yedek===null?"":yedek;
+  });
+}
+function tplEdited(rec,t){
+  var have=lineMap(rec.ozel_test).m, out=[];
+  (t.tests||[]).forEach(function(l){ var k=tplKey(l), i=l.indexOf(":"), def=i>0?l.slice(i+1).trim():"";
+    if(have[k]!==undefined && normv(have[k])!==normv(def)) out.push(k+": "+have[k]); });
+  return out;
+}
 function tplApplied(rec,t){
   var have=lineMap(rec.ozel_test).m;
   return (t.tests||[]).length>0 && t.tests.every(function(l){ return have[tplKey(l)]!==undefined; });
@@ -1095,7 +1115,16 @@ function renderEditor(keepScroll){
   Object.keys(TPL).forEach(function(k){
     var t=TPL[k], b=document.createElement("button"); b.type="button"; b.className="chip"+(tplApplied(rec,t)?" on":"");
     b.textContent=(tplApplied(rec,t)?"✓ ":"")+t.ad;
-    b.onclick=function(){ applyTpl(rec,t); queueSave(true); renderEditor(true); };
+    b.title=tplApplied(rec,t)?"Şablonu kaldırmak için dokun":"Şablonu eklemek için dokun";
+    b.onclick=function(){
+      if(tplApplied(rec,t)){
+        var ed=tplEdited(rec,t);
+        var msg=t.ad+" şablonu kaldırılsın mı?"+(ed.length?"\n\nDoldurduğun bulgular da silinecek:\n"+ed.join("\n"):"");
+        if(!confirm(msg)) return;
+        removeTpl(rec,t);
+      }else applyTpl(rec,t);
+      queueSave(true); renderEditor(true);
+    };
     tb2.appendChild(b);
   });
   c3.appendChild(tb2);
