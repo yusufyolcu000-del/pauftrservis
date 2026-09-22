@@ -134,6 +134,17 @@ body[data-tab="is"] .filters .segs{display:none}
 .vimg{flex:1;overflow:auto;display:flex;align-items:center;justify-content:center}
 .vimg img{max-width:100%;max-height:100%;object-fit:contain;cursor:zoom-in}
 .vimg img.zoom{max-width:none;max-height:none;cursor:zoom-out}
+.pm{display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap}
+.pmside{display:flex;flex-direction:column;gap:3px}
+.pmlbl{font-size:11.5px;color:var(--ink-3);font-weight:600}
+.pmseg{display:flex;border:1px solid var(--line-2);border-radius:8px;overflow:hidden}
+.pmseg button{border:0;background:var(--surface-2);min-width:44px;height:38px;font-size:20px;font-weight:600;cursor:pointer;color:var(--ink-2)}
+.pmseg button+button{border-left:1px solid var(--line-2)}
+.pmseg button.on{background:var(--accent);color:var(--accent-ink)}
+.pmslash{font-size:22px;color:var(--ink-3);padding-bottom:5px}
+.pmval{margin-left:auto;font-size:17px;font-weight:700;padding-bottom:7px;letter-spacing:.04em}
+.changed .pmseg{border-color:var(--warn);box-shadow:0 0 0 1px var(--warn)}
+.combo{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px}
 .isbtn{border-color:var(--accent);color:var(--accent);font-weight:600;display:inline-flex;align-items:center;gap:6px}
 .isbtn .cnt{min-width:20px;padding:0 6px;border-radius:999px;background:var(--warn);color:#fff;font-size:12px;line-height:20px;text-align:center}
 @keyframes flash{0%{box-shadow:0 0 0 3px var(--accent)}100%{box-shadow:var(--shadow)}}
@@ -920,6 +931,10 @@ function field(label,key,type,opts){
     el.value=(cur==null)?"":String(cur);
   }else if(type==="textarea"){
     el=document.createElement("textarea"); el.value=cur||""; el.rows=opts.rows||2;
+  }else if(type==="pm"){
+    el=document.createElement("input"); el.type="hidden"; el.value=cur||"";
+  }else if(type==="combo"){
+    el=document.createElement("input"); el.type="text"; el.value=cur||""; el.autocomplete="off";
   }else{
     el=document.createElement("input"); el.type=type;
     if(type==="number"){ if(!opts.neg){ el.min=0; el.max=opts.max||120; el.inputMode="numeric"; } }
@@ -942,7 +957,10 @@ function field(label,key,type,opts){
   }
   if(type==="textarea"&&opts.grow){ var fit=function(){ el.rows=Math.min(24,Math.max(opts.rows||2,String(el.value).split("\n").length+1)); }; fit(); el.addEventListener("input",fit); }
   el.addEventListener("input",function(){ tgt()[key]=el.value; queueSave(); updTitle(); upd(); });
-  w.appendChild(l); w.appendChild(el); if(hint){ w.appendChild(hint); upd(); } return w;
+  w.appendChild(l); w.appendChild(el);
+  if(type==="pm") w.appendChild(pmUI(el));
+  if(type==="combo") w.appendChild(comboUI(el,opts.list||[]));
+  if(hint){ w.appendChild(hint); upd(); } return w;
 }
 function card(title){
   var c=document.createElement("div"); c.className="card";
@@ -994,6 +1012,52 @@ function blokListe(getArr,title,opts){
 }
 
 
+
+/* sağ/sol +/- seçici: değer "sağ/sol" biçiminde saklanır (ör. "-/+") */
+function pmUI(el){
+  var box=document.createElement("div"); box.className="pm";
+  var parca=function(){ var p=String(el.value||"").replace(/−/g,"-").split("/"); return [(p[0]||"").trim(),(p[1]||"").trim()]; };
+  var goster=document.createElement("span"); goster.className="pmval";
+  var butonlar=[];
+  var yenile=function(){
+    var p=parca();
+    butonlar.forEach(function(b){ b.el.classList.toggle("on",p[b.i]===b.v); b.el.setAttribute("aria-pressed",p[b.i]===b.v?"true":"false"); });
+    goster.textContent=el.value?el.value.replace(/-/g,"−"):"—";
+  };
+  [["Sağ",0],["Sol",1]].forEach(function(sd,idx){
+    var g=document.createElement("div"); g.className="pmside";
+    var t=document.createElement("span"); t.className="pmlbl"; t.textContent=sd[0]; g.appendChild(t);
+    var seg=document.createElement("div"); seg.className="pmseg";
+    [["-","−"],["+","+"]].forEach(function(o){
+      var b=document.createElement("button"); b.type="button"; b.textContent=o[1]; b.setAttribute("aria-label",sd[0]+" "+(o[0]==="+"?"pozitif":"negatif"));
+      b.onclick=function(){
+        var p=parca(); p[sd[1]]=(p[sd[1]]===o[0])?"":o[0];
+        el.value=(p[0]||p[1])?p[0]+"/"+p[1]:"";
+        el.dispatchEvent(new Event("input")); yenile();
+      };
+      butonlar.push({el:b,i:sd[1],v:o[0]}); seg.appendChild(b);
+    });
+    g.appendChild(seg); box.appendChild(g);
+    if(idx===0){ var sl=document.createElement("span"); sl.className="pmslash"; sl.textContent="/"; box.appendChild(sl); }
+  });
+  box.appendChild(goster);
+  yenile();
+  return box;
+}
+/* hazır seçenekler + serbest yazı */
+function comboUI(el,list){
+  var box=document.createElement("div"); box.className="combo";
+  var chips=[];
+  var yenile=function(){ chips.forEach(function(c){ c.classList.toggle("on",normv(el.value)===c.dataset.v); }); };
+  list.filter(Boolean).forEach(function(v){
+    var c=document.createElement("button"); c.type="button"; c.className="chip sm"; c.textContent=v; c.dataset.v=v;
+    c.onclick=function(){ el.value=(normv(el.value)===v)?"":v; el.dispatchEvent(new Event("input")); yenile(); };
+    chips.push(c); box.appendChild(c);
+  });
+  el.addEventListener("input",yenile);
+  yenile();
+  return box;
+}
 function kgBlock(rec,prev){
   if(!rec.kg||typeof rec.kg!=="object") rec.kg={};
   var box=document.createElement("div"); box.className="kg";
@@ -1311,16 +1375,16 @@ function renderEditor(keepScroll){
   g5b.appendChild(field("Özel testler","ozel_test","textarea",M({cls:"full",rows:3,grow:1,ph:"Şablondan ekle ya da yaz: DBK: -/-"})));
   c3.appendChild(g5b);
 
-  var r=g3(); r.style.marginTop="10px";
-  r.appendChild(field("DTR","dtr","text",M({ph:"Doğal"})));
-  r.appendChild(field("Babinski","babinski","text",M({ph:"-/-"})));
-  r.appendChild(field("Hoffmann","hoffmann","text",M({ph:"-/-"})));
+  var r=grid(); r.style.marginTop="10px";
+  r.appendChild(field("DTR","dtr","text",M({cls:"full",ph:"Doğal"})));
+  r.appendChild(field("Babinski (sağ/sol)","babinski","pm",M({cls:"half"})));
+  r.appendChild(field("Hoffmann (sağ/sol)","hoffmann","pm",M({cls:"half"})));
   c3.appendChild(r);
 
   var g6=grid(); g6.style.marginTop="10px";
   g6.appendChild(field("Duyu","duyu","text",M({cls:"half",ph:"Duyu defisiti yok"})));
   g6.appendChild(field("Spastisite","spastisite","text",M({cls:"half",ph:"Yok / MAS"})));
-  g6.appendChild(field("Fonksiyonel durum","fonk","select",M({cls:"half",list:FONK})));
+  g6.appendChild(field("Fonksiyonel durum","fonk","combo",M({cls:"full",list:FONK,ph:"Aşağıdan seç ya da kendin yaz"})));
   g6.appendChild(field("FAS","fas","select",M({list:FAS})));
   g6.appendChild(field("GYA","gya","select",M({list:GYA})));
   g6.appendChild(field("GYA notu","gya_not","text",M({cls:"full",ph:"Uzun süre yürümekte zorlanıyor…"})));
