@@ -390,7 +390,11 @@ var ertele={editor:null,liste:false,vizit:false}, refocus=null, urlCache={};
 var CK="", OK_="";
 
 /* ---------- form tanımı ---------- */
-var IDRAR   = ["","Kontinan","İnkontinan","Üriner kateter","Aralıklı kateterizasyon","Bez"];
+var IDRAR   = ["Spontan","Sondalı","TAK"];
+var TAKSIK  = ["4×1","5×1","6×1"];
+var GAITA   = ["Kontinan","Bezli","İnkontinan"];
+/* eski birleşik "idrar-gaita" değerlerini ayır */
+var ESKI_IG = {"Kontinan":["Spontan","Kontinan"],"İnkontinan":["İnkontinan","İnkontinan"],"Üriner kateter":["Sondalı",""],"Aralıklı kateterizasyon":["TAK",""],"Bez":["Bezli","Bezli"]};
 var FONK    = ["","Yatak seviyesinde","Tekerlekli sandalye","Yardımla ambule","Yardımcı cihazla ambule","Bağımsız ambule"];
 var FAS     = ["","0","1","2","3","4","5"];
 var GYA     = ["","Tam bağımsız","Kısmi bağımlı","Tam bağımlı"];
@@ -398,15 +402,15 @@ var VARYOK  = ["","Var","Yok"];
 
 /* kopyalama ve vizit özeti için muayene sırası */
 var MUAYENE = [
-  ["bilinc","BİLİNÇ"],["idrar","İDRAR-GAİTA"],["_vas","VAS"],["eha","ROM"],["kas","KAS GÜCÜ"],["_kg",""],
+  ["bilinc","BİLİNÇ"],["_idrar","İDRAR"],["gaita","GAİTA"],["_vas","VAS"],["eha","ROM"],["kas","KAS GÜCÜ"],["_kg",""],
   ["ozel_test",""],["_refleks","REFLEKS"],["duyu","DUYU"],["spastisite","SPASTİSİTE"],["brunnstrom","BRUNNSTROM"],
   ["_oturma","OTURMA DENGESİ"],["mkf","MKF SIKMA"],["basi","BASI YARASI"],["fas","FAS"],["fonk","FONKSİYONEL DURUM"],
   ["_gya","GÜNLÜK YAŞAM AKTİVİTELERİ"],["diger","DİĞER"]
 ];
 /* bir değerlendirme kaydındaki alanlar (başvuru ve her hafta aynı yapıda) */
-var MKEYS=["bilinc","idrar","vas_ist","vas_har","vas_gece","eha","kas","kg","ozel_test","dtr","babinski","hoffmann","duyu",
+var MKEYS=["bilinc","idrar","tak","gaita","vas_ist","vas_har","vas_gece","eha","kas","kg","ozel_test","dtr","babinski","hoffmann","duyu",
   "spastisite","brunnstrom","oturma_kisa","oturma_uzun","mkf","basi","fas","fonk","gya","gya_not","diger"];
-var LBL={bilinc:"Bilinç",idrar:"İdrar-gaita",vas_ist:"VAS istirahat",vas_har:"VAS hareket",vas_gece:"VAS gece",eha:"ROM",
+var LBL={bilinc:"Bilinç",idrar:"İdrar",tak:"TAK sıklığı",gaita:"Gaita",vas_ist:"VAS istirahat",vas_har:"VAS hareket",vas_gece:"VAS gece",eha:"ROM",
   kas:"Kas gücü",dtr:"DTR",babinski:"Babinski",hoffmann:"Hoffmann",duyu:"Duyu",spastisite:"Spastisite",brunnstrom:"Brunnstrom",
   oturma_kisa:"Kısa oturma",oturma_uzun:"Uzun oturma",mkf:"MKF",basi:"Bası yarası",fas:"FAS",fonk:"Fonksiyonel durum",
   gya:"GYA",gya_not:"GYA notu",diger:"Diğer"};
@@ -680,6 +684,7 @@ function flatRec(r){
       return;
     }
     if(k==="ozel_test"){ var lm=lineMap(r.ozel_test); lm.o.forEach(function(x){ out.push([x,lm.m[x]]); }); return; }
+    if(k==="tak" && !/TAK/i.test(normv(r.idrar))) return;
     out.push([LBL[k]||k,normv(r[k])]);
   });
   return out;
@@ -880,6 +885,9 @@ function prep(d){
   if(!Array.isArray(d.anamnez.goruntuleme)) d.anamnez.goruntuleme=[];
   if(!Array.isArray(d.anamnez.haftalik)) d.anamnez.haftalik=[];
   if(!Array.isArray(d.anamnez.fotolar)) d.anamnez.fotolar=[];
+  [d.anamnez].concat(d.anamnez.haftalik).forEach(function(r){
+    if(r.gaita===undefined && ESKI_IG[r.idrar]){ var m=ESKI_IG[r.idrar]; r.idrar=m[0]; r.gaita=m[1]; }
+  });
   ["lablar","konsultasyonlar","vizitler","isler"].forEach(function(k){ if(!Array.isArray(d[k])) d[k]=[]; });
   return d;
 }
@@ -887,7 +895,7 @@ function blank(){
   return prep({id:uid(),user_id:user.id,oda:"",hasta_kodu:"",yas:null,cinsiyet:"",yatis_tarihi:today(),
     durum:"yatan",taburcu_tarihi:null,tani:"",oyku:"",tedavi:"",ftr_program:"",islemler:"",
     lablar:[],konsultasyonlar:[],vizitler:[],isler:[],
-    anamnez:{bilinc:"Açık, oryante, koopere",idrar:"Kontinan",goruntuleme:[]}});
+    anamnez:{bilinc:"Açık, oryante, koopere",idrar:"Spontan",gaita:"Kontinan",goruntuleme:[]}});
 }
 function payload(d){
   var an=d.anamnez||{};
@@ -1355,8 +1363,16 @@ function renderEditor(keepScroll){
   c3.appendChild(tb2);
 
   var g4=grid();
-  g4.appendChild(field("Bilinç","bilinc","text",M({cls:"half"})));
-  g4.appendChild(field("İdrar-gaita","idrar","select",M({cls:"half",list:IDRAR})));
+  g4.appendChild(field("Bilinç","bilinc","text",M({cls:"full"})));
+  var idW=field("İdrar","idrar","combo",M({cls:"half",list:IDRAR,ph:"Seç ya da yaz"}));
+  var tkW=field("TAK sıklığı","tak","combo",M({cls:"half",list:TAKSIK,ph:"ör. 6×1"}));
+  var gtW=field("Gaita","gaita","combo",M({cls:"half",list:GAITA,ph:"Seç ya da yaz"}));
+  g4.appendChild(idW); g4.appendChild(tkW); g4.appendChild(gtW);
+  (function(){
+    var inp=idW.querySelector('[data-f="idrar"]');
+    var tg=function(){ tkW.style.display=/TAK/i.test(inp.value)?"":"none"; };
+    inp.addEventListener("input",tg); tg();
+  })();
   c3.appendChild(g4);
 
   var v=g3(); v.style.marginTop="10px";
@@ -1492,7 +1508,9 @@ function muayeneSatirlari(a){
       });
       return;
     }
-    if(k==="_vas"){
+    if(k==="_idrar"){
+      v=normv(a.idrar); if(/TAK/i.test(v) && normv(a.tak)) v+=" "+normv(a.tak);
+    }else if(k==="_vas"){
       var p=[]; if(normv(a.vas_ist)) p.push("İSTİRAHAT: "+a.vas_ist);
       if(normv(a.vas_har)) p.push("HAREKET: "+a.vas_har);
       if(normv(a.vas_gece)) p.push("GECE: "+a.vas_gece);
