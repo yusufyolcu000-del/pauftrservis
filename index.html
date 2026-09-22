@@ -119,6 +119,21 @@ body[data-tab="is"] .filters .segs{display:none}
 .editor{max-width:860px;margin:0 auto;padding:18px 16px 80px}
 .ed-head{display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap}
 .ed-head h1{font-size:22px;margin:0;font-weight:700;letter-spacing:-.02em}
+.fotos{margin-top:4px}
+.fgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px;margin-bottom:8px}
+.fthumb{border:1px solid var(--line);border-radius:8px;padding:0;background:var(--surface-2);cursor:pointer;overflow:hidden;display:flex;flex-direction:column}
+.fthumb img{width:100%;aspect-ratio:3/4;object-fit:cover;display:block;background:var(--line)}
+.fthumb span{font-size:11.5px;color:var(--ink-3);padding:3px 6px;text-align:left}
+.fthumb.err img{visibility:hidden}
+.fbtn{position:relative;overflow:hidden;display:inline-flex;align-items:center}
+.fbtn input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%}
+.viewer{position:fixed;inset:0;background:#0b1116;z-index:90;display:none;flex-direction:column;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+.viewer.on{display:flex}
+.vtop{display:flex;align-items:center;gap:8px;padding:10px 12px;color:#dfe7ee}
+.vtop .btn{background:#1d2731;border-color:#33414e;color:#e6edf3}
+.vimg{flex:1;overflow:auto;display:flex;align-items:center;justify-content:center}
+.vimg img{max-width:100%;max-height:100%;object-fit:contain;cursor:zoom-in}
+.vimg img.zoom{max-width:none;max-height:none;cursor:zoom-out}
 .isbtn{border-color:var(--accent);color:var(--accent);font-weight:600;display:inline-flex;align-items:center;gap:6px}
 .isbtn .cnt{min-width:20px;padding:0 6px;border-radius:999px;background:var(--warn);color:#fff;font-size:12px;line-height:20px;text-align:center}
 @keyframes flash{0%{box-shadow:0 0 0 3px var(--accent)}100%{box-shadow:var(--shadow)}}
@@ -329,6 +344,12 @@ details.neuro summary{cursor:pointer;font-size:13px;font-weight:600;color:var(--
   </div>
 </div>
 
+<div class="viewer" id="viewer">
+  <div class="vtop"><span id="viewDate"></span><div class="spacer"></div>
+    <button class="btn sm danger" id="viewDel">Sil</button><button class="btn sm" id="viewClose">Kapat</button></div>
+  <div class="vimg"><img id="viewImg" alt="Fotoğraf"></div>
+</div>
+
 <div class="sheet" id="menuSheet">
   <div class="box">
     <div class="sechead">AYARLAR<div class="spacer"></div><button class="btn sm" id="menuClose">Kapat</button></div>
@@ -354,6 +375,7 @@ var SUPABASE_ANON_KEY = "sb_publishable_q4tSNrO2uMxRaeP04XJpFQ_k_mfxpTY";
 var $ = function(i){ return document.getElementById(i); };
 var sb=null, user=null, rows=[], currentId=null, draft=null, isNew=false;
 var saveTimer=null, signUpMode=false, durumFilt="yatan", vizitIdx=0, lastErr="", tab="hasta", vNote={}, selRec=0, neuroOpen=false, showTable=false;
+var ertele={editor:null,liste:false,vizit:false}, refocus=null, urlCache={};
 var CK="", OK_="";
 
 /* ---------- form tanımı ---------- */
@@ -514,7 +536,7 @@ function pull(){
     (r.data||[]).forEach(function(s){ ids[s.id]=1; if(!pend[s.id]) map[s.id]=s; });
     rows=Object.keys(map).map(function(k){ return map[k]; }).filter(function(n){ return ids[n.id]||pend[n.id]; });
     sortRows(); cacheSet(rows); setSync(); render();
-    if(draft && currentId && !dirty()){ var f=rows.find(function(n){ return n.id===currentId; }); if(f){ draft=prep(clone(f)); renderEditor(true); } }
+    if(draft && currentId){ var f=rows.find(function(n){ return n.id===currentId; }); if(f) gelenKayit(f); }
   }).catch(function(){ setSync(); });
 }
 function flush(){
@@ -543,10 +565,10 @@ function onRemote(p){
   }else{
     var i=rows.findIndex(function(n){ return n.id===row.id; });
     if(i>=0) rows[i]=p.new; else rows.push(p.new);
-    if(currentId===row.id&&draft&&!dirty()){ draft=prep(clone(p.new)); renderEditor(true); }
+    if(currentId===row.id) gelenKayit(p.new);
   }
   sortRows(); cacheSet(rows); render();
-  if($("vizit").classList.contains("on") && document.activeElement && document.activeElement.id!=="vNoteTa") renderVizit(true);
+  if($("vizit").classList.contains("on")){ if(yaziyor($("vBody"))) ertele.vizit=true; else renderVizit(true); }
 }
 function setSync(t,cls){
   var s=$("sync"), n=obGet().length;
@@ -664,6 +686,30 @@ function pairTxt(x){ if(x[2]==="sp") return x[0]+" "+x[1]; return x[1]?x[0]+": "
 function recAd(i){ return i===0?"Başvuru":i+". hafta"; }
 function recTarih(d,i){ var r=recs(d)[i]; return i===0?(d.yatis_tarihi||""):(r&&r.t)||""; }
 
+
+/* ---------- yazarken ekranı yeniden çizmeme ---------- */
+function yaziyor(kap){
+  var ae=document.activeElement;
+  return !!(ae && kap && kap.contains(ae) && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName) && ae.type!=="checkbox" && ae.type!=="file");
+}
+function ayniMi(a,b){ return JSON.stringify(payload(a))===JSON.stringify(payload(b)); }
+function yerelBekliyor(id){ return !!saveTimer || obGet().some(function(o){ return o.id===id; }); }
+/* sunucudan gelen kayıt açık hastaysa: yankıysa yok say, yazıyorsan ertele */
+function gelenKayit(inc){
+  if(!draft || inc.id!==draft.id) return;
+  inc=prep(clone(inc));
+  if(ayniMi(inc,draft)) return;
+  if(yerelBekliyor(inc.id)) return;
+  if(yaziyor($("detail"))){ ertele.editor=inc; return; }
+  draft=inc; renderEditor(true);
+}
+document.addEventListener("focusout",function(){
+  setTimeout(function(){
+    if(ertele.editor && !yaziyor($("detail"))){ var e=ertele.editor; ertele.editor=null; if(draft&&e.id===draft.id&&!yerelBekliyor(e.id)){ draft=e; renderEditor(true); } }
+    if(ertele.liste && !yaziyor($("rows"))){ ertele.liste=false; render(); }
+    if(ertele.vizit && !yaziyor($("vBody"))){ ertele.vizit=false; if($("vizit").classList.contains("on")) renderVizit(true); }
+  },120);
+});
 /* ---------- iş listesi ---------- */
 function updIsCount(){
   var t=0;
@@ -697,7 +743,7 @@ function mutateRow(id,fn){
   rows[i]=Object.assign({},rows[i],body); cacheSet(rows);
   if(draft&&draft.id===id){ fn(draft); renderEditor(true); }
   obPush({op:"upsert",id:id,body:body,ts:Date.now()});
-  render(); if($("vizit").classList.contains("on")) renderVizit(true);
+  render(true); if($("vizit").classList.contains("on")) renderVizit(true);
   if(navigator.onLine) flush();
 }
 function renderIsler(){
@@ -737,10 +783,12 @@ function renderIsler(){
     });
 
     var ad=document.createElement("div"); ad.className="iadd";
-    var ai=document.createElement("input"); ai.type="text"; ai.placeholder="+ iş ekle";
+    var ai=document.createElement("input"); ai.type="text"; ai.placeholder="+ iş ekle"; ai.setAttribute("data-add",n.id);
     ai.addEventListener("keydown",function(e){
       if(e.key!=="Enter") return;
+      e.preventDefault();
       var v=ai.value.trim(); if(!v) return;
+      refocus=n.id;
       mutateRow(n.id,function(d){ d.isler.push({m:v,ok:false}); });
     });
     ad.appendChild(ai); g.appendChild(ad);
@@ -766,9 +814,14 @@ Array.prototype.forEach.call(document.querySelectorAll(".tab"),function(t){
     render();
   };
 });
-function render(){
+function render(zorla){
   updIsCount();
-  if(tab==="is"){ renderIsler(); return; }
+  if(tab==="is"){
+    if(!zorla && yaziyor($("rows"))){ ertele.liste=true; return; }
+    renderIsler();
+    if(refocus){ var r=document.querySelector('[data-add="'+refocus+'"]'); refocus=null; if(r) r.focus({preventScroll:true}); }
+    return;
+  }
   var list=filtered(), box=$("rows");
   $("count").textContent=list.length+" hasta";
   box.innerHTML="";
@@ -815,6 +868,7 @@ function prep(d){
   if(!d.anamnez.hikaye && d.oyku) d.anamnez.hikaye=d.oyku;
   if(!Array.isArray(d.anamnez.goruntuleme)) d.anamnez.goruntuleme=[];
   if(!Array.isArray(d.anamnez.haftalik)) d.anamnez.haftalik=[];
+  if(!Array.isArray(d.anamnez.fotolar)) d.anamnez.fotolar=[];
   ["lablar","konsultasyonlar","vizitler","isler"].forEach(function(k){ if(!Array.isArray(d[k])) d[k]=[]; });
   return d;
 }
@@ -1024,6 +1078,100 @@ function gelisimTablosu(d){
   wrapT.appendChild(tbl);
   return wrapT;
 }
+
+/* ---------- fotoğraflar (Supabase Storage: "fotolar") ---------- */
+var BUCKET="fotolar";
+function sikistir(file){
+  return new Promise(function(res,rej){
+    var url=URL.createObjectURL(file), img=new Image();
+    img.onload=function(){
+      var M=1800, w=img.naturalWidth, h=img.naturalHeight, k=Math.min(1,M/Math.max(w,h));
+      var c=document.createElement("canvas"); c.width=Math.round(w*k); c.height=Math.round(h*k);
+      c.getContext("2d").drawImage(img,0,0,c.width,c.height);
+      URL.revokeObjectURL(url);
+      c.toBlob(function(b){ b?res(b):rej(new Error("Görüntü işlenemedi")); },"image/jpeg",0.82);
+    };
+    img.onerror=function(){ URL.revokeObjectURL(url); rej(new Error("Görüntü okunamadı")); };
+    img.src=url;
+  });
+}
+function fotoUrl(path){
+  var c=urlCache[path];
+  if(c && c.exp>Date.now()) return Promise.resolve(c.u);
+  return sb.storage.from(BUCKET).createSignedUrl(path,3600).then(function(r){
+    if(r.error||!r.data) throw r.error||new Error("adres alınamadı");
+    urlCache[path]={u:r.data.signedUrl,exp:Date.now()+50*60*1000};
+    return r.data.signedUrl;
+  });
+}
+function fotoYukle(hid,files,durumEl){
+  if(!files||!files.length) return;
+  if(!navigator.onLine){ alert("Fotoğraf yüklemek için internet bağlantısı gerekli."); return; }
+  var list=Array.prototype.slice.call(files), i=0, eklenen=[];
+  var adim=function(){
+    if(i>=list.length){
+      if(durumEl) durumEl.textContent="";
+      if(eklenen.length) mutateRow(hid,function(d){ d.anamnez.fotolar=(d.anamnez.fotolar||[]).concat(eklenen); });
+      return;
+    }
+    var f=list[i++];
+    if(durumEl) durumEl.textContent="Yükleniyor "+i+"/"+list.length+"…";
+    sikistir(f).then(function(blob){
+      var path=user.id+"/"+hid+"/"+Date.now()+"-"+Math.random().toString(36).slice(2,7)+".jpg";
+      return sb.storage.from(BUCKET).upload(path,blob,{contentType:"image/jpeg",upsert:false}).then(function(r){
+        if(r.error) throw r.error;
+        eklenen.push({p:path,t:today()});
+      });
+    }).then(adim).catch(function(e){
+      var m=(e&&e.message)||String(e);
+      if(/bucket/i.test(m)) m="Fotoğraf deposu kurulmamış. Supabase'de foto-kurulum.sql dosyasını çalıştır.";
+      alert("Fotoğraf yüklenemedi: "+m);
+      adim();
+    });
+  };
+  adim();
+}
+function kucukResim(f,hid){
+  var b=document.createElement("button"); b.type="button"; b.className="fthumb";
+  var im=document.createElement("img"); im.alt="Fotoğraf "+trDate(f.t); im.loading="lazy";
+  var d=document.createElement("span"); d.textContent=trDate(f.t);
+  b.appendChild(im); b.appendChild(d);
+  fotoUrl(f.p).then(function(u){ im.src=u; }).catch(function(){ b.classList.add("err"); d.textContent="açılamadı"; });
+  b.onclick=function(){ fotoGoster(f,hid); };
+  return b;
+}
+function fotoBlok(hid,fotolar,duzenlenebilir){
+  var box=document.createElement("div"); box.className="fotos";
+  var g=document.createElement("div"); g.className="fgrid";
+  (fotolar||[]).slice().reverse().forEach(function(f){ g.appendChild(kucukResim(f,hid)); });
+  if(fotolar&&fotolar.length) box.appendChild(g);
+  if(duzenlenebilir){
+    var bar=document.createElement("div"); bar.className="addline";
+    var durum=document.createElement("span"); durum.className="hint";
+    var dugme=function(yazi,kamera){
+      var l=document.createElement("label"); l.className="btn sm fbtn";
+      var inp=document.createElement("input"); inp.type="file"; inp.accept="image/*"; if(kamera) inp.setAttribute("capture","environment"); else inp.multiple=true;
+      inp.onchange=function(){ fotoYukle(hid,inp.files,durum); inp.value=""; };
+      l.appendChild(document.createTextNode(yazi)); l.appendChild(inp);
+      return l;
+    };
+    bar.appendChild(dugme("📷 Fotoğraf çek",true)); bar.appendChild(dugme("Galeriden seç",false)); bar.appendChild(durum);
+    box.appendChild(bar);
+  }
+  return box;
+}
+function fotoGoster(f,hid){
+  var v=$("viewer"); v.classList.add("on");
+  var im=$("viewImg"); im.removeAttribute("src"); im.classList.remove("zoom");
+  $("viewDate").textContent=trDate(f.t);
+  fotoUrl(f.p).then(function(u){ im.src=u; });
+  $("viewDel").onclick=function(){
+    if(!confirm("Bu fotoğraf silinsin mi?")) return;
+    sb.storage.from(BUCKET).remove([f.p]).then(function(){});
+    mutateRow(hid,function(d){ d.anamnez.fotolar=(d.anamnez.fotolar||[]).filter(function(x){ return x.p!==f.p; }); });
+    v.classList.remove("on");
+  };
+}
 function renderEditor(keepScroll){
   var d=$("detail"), st=d.scrollTop; d.innerHTML="";
   if(!draft){ var e=document.createElement("div"); e.className="empty"; e.style.paddingTop="56px"; e.textContent="Soldan hasta seç ya da yeni hasta ekle."; d.appendChild(e); return; }
@@ -1207,6 +1355,10 @@ function renderEditor(keepScroll){
   sh.textContent="Seans, FTR başlangıcından (boşsa yatış tarihinden) bugüne kadarki hafta içi günlerden hesaplanır; resmi tatiller düşülür. Yapılamayan seans için düzeltmeye -1, -2 yaz.";
   g9.appendChild(sh);
   g9.appendChild(field("Yapılan işlemler","islemler","textarea",{cls:"full",rows:3}));
+  var fw=document.createElement("div"); fw.className="full"; fw.style.gridColumn="1/-1";
+  var fl=document.createElement("label"); fl.textContent="Fotoğraflar (FTR kartı vb.)"; fw.appendChild(fl);
+  fw.appendChild(fotoBlok(draft.id,draft.anamnez.fotolar,true));
+  g9.appendChild(fw);
   c5.appendChild(g9); wrap.appendChild(c5);
 
   /* bekleyen işler */
@@ -1223,8 +1375,8 @@ function renderEditor(keepScroll){
   var al=document.createElement("div"); al.className="addline";
   var ai=document.createElement("input"); ai.type="text"; ai.placeholder="Yeni iş yaz, Enter…"; ai.id="isAddInput";
   var ab=document.createElement("button"); ab.className="btn sm"; ab.textContent="Ekle";
-  var addIs=function(){ var vv=ai.value.trim(); if(!vv) return; draft.isler.push({m:vv,ok:false}); queueSave(true); renderEditor(true); render(); };
-  ab.onclick=addIs; ai.addEventListener("keydown",function(e){ if(e.key==="Enter") addIs(); });
+  var addIs=function(){ var vv=ai.value.trim(); if(!vv) return; draft.isler.push({m:vv,ok:false}); queueSave(true); renderEditor(true); render(); var x=$("isAddInput"); if(x) x.focus({preventScroll:true}); };
+  ab.onclick=addIs; ai.addEventListener("keydown",function(e){ if(e.key==="Enter"){ e.preventDefault(); addIs(); } });
   al.appendChild(ai); al.appendChild(ab); c6.appendChild(al);
   wrap.appendChild(c6);
 
@@ -1244,9 +1396,9 @@ function renderEditor(keepScroll){
     bl.appendChild(dd); bl.appendChild(ta); c7.appendChild(bl);
   });
   var kl=document.createElement("div"); kl.className="addline";
-  var ki=document.createElement("input"); ki.type="text"; ki.placeholder="Bölüm (Nöroloji, Üroloji…)";
+  var ki=document.createElement("input"); ki.type="text"; ki.placeholder="Bölüm (Nöroloji, Üroloji…)"; ki.id="konsAddInput";
   var kb=document.createElement("button"); kb.className="btn sm"; kb.textContent="İstem ekle";
-  var addK=function(){ var vv=ki.value.trim(); if(!vv) return; draft.konsultasyonlar.push({b:vv,t:today(),c:""}); queueSave(true); renderEditor(true); render(); };
+  var addK=function(){ var vv=ki.value.trim(); if(!vv) return; draft.konsultasyonlar.push({b:vv,t:today(),c:""}); queueSave(true); renderEditor(true); render(); var x=$("konsAddInput"); if(x) x.focus({preventScroll:true}); };
   kb.onclick=addK; ki.addEventListener("keydown",function(e){ if(e.key==="Enter") addK(); });
   kl.appendChild(ki); kl.appendChild(kb); c7.appendChild(kl);
   wrap.appendChild(c7);
@@ -1346,7 +1498,8 @@ function queueSave(now){
 function removeRow(){
   if(!draft) return;
   if(!confirm("Bu hasta kaydı silinsin mi? Geri alınamaz.")) return;
-  var id=draft.id;
+  var id=draft.id, fp=(draft.anamnez.fotolar||[]).map(function(f){ return f.p; });
+  if(fp.length && navigator.onLine){ try{ sb.storage.from(BUCKET).remove(fp); }catch(e){} }
   rows=rows.filter(function(n){ return n.id!==id; }); cacheSet(rows);
   obPush({op:"delete",id:id,ts:Date.now()});
   currentId=null; draft=null; document.body.dataset.view="list";
@@ -1475,7 +1628,14 @@ function renderVizit(keep){
   }
   var gr=(a.goruntuleme||[]).slice().reverse().map(function(x){ return trDate(x.t)+(x.b?" · "+x.b:"")+"\n"+x.m; }).join("\n\n");
   sec("GÖRÜNTÜLEME",gr);
-  sec("YAPILAN İŞLEMLER",n.islemler);
+  var fz=(A(n).fotolar||[]);
+  if(n.islemler || fz.length){
+    var sy=document.createElement("section");
+    var ty=document.createElement("h3"); ty.textContent="YAPILAN İŞLEMLER"; sy.appendChild(ty);
+    if(n.islemler){ var py=document.createElement("p"); py.textContent=n.islemler; sy.appendChild(py); }
+    if(fz.length) sy.appendChild(fotoBlok(n.id,fz,false));
+    w.appendChild(sy);
+  }
   var k=(n.konsultasyonlar||[]).map(function(x){ return x.b+" ("+trDate(x.t)+"): "+(x.c||"cevap bekliyor"); }).join("\n\n");
   sec("KONSÜLTASYONLAR",k);
   var lb=(n.lablar||[]).slice(-3).reverse().map(function(x){ return trDate(x.t)+"\n"+x.m; }).join("\n\n");
@@ -1504,6 +1664,7 @@ $("vEdit").onclick=function(){ var n=vizitList()[vizitIdx]; if(!n) return; $("vi
   },{passive:true});
 })();
 document.addEventListener("keydown",function(e){
+  if($("viewer").classList.contains("on")){ if(e.key==="Escape") $("viewer").classList.remove("on"); return; }
   if($("vizit").classList.contains("on")){
     var ae=document.activeElement; if(ae && /^(TEXTAREA|INPUT)$/.test(ae.tagName)){ if(e.key==="Escape") ae.blur(); return; }
     if(e.key==="ArrowRight") $("vNext").click();
@@ -1525,6 +1686,8 @@ function applyTheme(t){
 applyTheme(document.documentElement.getAttribute("data-theme")||"light");
 Array.prototype.forEach.call(document.querySelectorAll("[data-th]"),function(b){ b.onclick=function(){ applyTheme(b.dataset.th); }; });
 $("menu").onclick=function(){ $("menuSheet").classList.add("on"); };
+$("viewClose").onclick=function(){ $("viewer").classList.remove("on"); };
+$("viewImg").onclick=function(){ this.classList.toggle("zoom"); };
 $("menuClose").onclick=function(){ $("menuSheet").classList.remove("on"); };
 $("menuSheet").addEventListener("click",function(e){ if(e.target.id==="menuSheet") $("menuSheet").classList.remove("on"); });
 $("sheet").addEventListener("click",function(e){ if(e.target.id==="sheet") $("sheet").classList.remove("on"); });
