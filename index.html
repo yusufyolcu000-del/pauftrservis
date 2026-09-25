@@ -885,6 +885,7 @@ function prep(d){
   if(!Array.isArray(d.anamnez.goruntuleme)) d.anamnez.goruntuleme=[];
   if(!Array.isArray(d.anamnez.haftalik)) d.anamnez.haftalik=[];
   if(!Array.isArray(d.anamnez.fotolar)) d.anamnez.fotolar=[];
+  if(!Array.isArray(d.anamnez.ilac_fotolar)) d.anamnez.ilac_fotolar=[];
   [d.anamnez].concat(d.anamnez.haftalik).forEach(function(r){
     if(r.gaita===undefined && ESKI_IG[r.idrar]){ var m=ESKI_IG[r.idrar]; r.idrar=m[0]; r.gaita=m[1]; }
   });
@@ -1176,14 +1177,14 @@ function fotoUrl(path){
     return r.data.signedUrl;
   });
 }
-function fotoYukle(hid,files,durumEl){
+function fotoYukle(hid,key,files,durumEl){
   if(!files||!files.length) return;
   if(!navigator.onLine){ alert("Fotoğraf yüklemek için internet bağlantısı gerekli."); return; }
   var list=Array.prototype.slice.call(files), i=0, eklenen=[];
   var adim=function(){
     if(i>=list.length){
       if(durumEl) durumEl.textContent="";
-      if(eklenen.length) mutateRow(hid,function(d){ d.anamnez.fotolar=(d.anamnez.fotolar||[]).concat(eklenen); });
+      if(eklenen.length) mutateRow(hid,function(d){ d.anamnez[key]=(d.anamnez[key]||[]).concat(eklenen); });
       return;
     }
     var f=list[i++];
@@ -1203,19 +1204,19 @@ function fotoYukle(hid,files,durumEl){
   };
   adim();
 }
-function kucukResim(f,hid){
+function kucukResim(f,hid,key){
   var b=document.createElement("button"); b.type="button"; b.className="fthumb";
   var im=document.createElement("img"); im.alt="Fotoğraf "+trDate(f.t); im.loading="lazy";
   var d=document.createElement("span"); d.textContent=trDate(f.t);
   b.appendChild(im); b.appendChild(d);
   fotoUrl(f.p).then(function(u){ im.src=u; }).catch(function(){ b.classList.add("err"); d.textContent="açılamadı"; });
-  b.onclick=function(){ fotoGoster(f,hid); };
+  b.onclick=function(){ fotoGoster(f,hid,key); };
   return b;
 }
-function fotoBlok(hid,fotolar,duzenlenebilir){
+function fotoBlok(hid,key,fotolar,duzenlenebilir){
   var box=document.createElement("div"); box.className="fotos";
   var g=document.createElement("div"); g.className="fgrid";
-  (fotolar||[]).slice().reverse().forEach(function(f){ g.appendChild(kucukResim(f,hid)); });
+  (fotolar||[]).slice().reverse().forEach(function(f){ g.appendChild(kucukResim(f,hid,key)); });
   if(fotolar&&fotolar.length) box.appendChild(g);
   if(duzenlenebilir){
     var bar=document.createElement("div"); bar.className="addline";
@@ -1223,7 +1224,7 @@ function fotoBlok(hid,fotolar,duzenlenebilir){
     var dugme=function(yazi,kamera){
       var l=document.createElement("label"); l.className="btn sm fbtn";
       var inp=document.createElement("input"); inp.type="file"; inp.accept="image/*"; if(kamera) inp.setAttribute("capture","environment"); else inp.multiple=true;
-      inp.onchange=function(){ fotoYukle(hid,inp.files,durum); inp.value=""; };
+      inp.onchange=function(){ fotoYukle(hid,key,inp.files,durum); inp.value=""; };
       l.appendChild(document.createTextNode(yazi)); l.appendChild(inp);
       return l;
     };
@@ -1232,7 +1233,7 @@ function fotoBlok(hid,fotolar,duzenlenebilir){
   }
   return box;
 }
-function fotoGoster(f,hid){
+function fotoGoster(f,hid,key){
   var v=$("viewer"); v.classList.add("on");
   var im=$("viewImg"); im.removeAttribute("src"); im.classList.remove("zoom");
   $("viewDate").textContent=trDate(f.t);
@@ -1240,7 +1241,7 @@ function fotoGoster(f,hid){
   $("viewDel").onclick=function(){
     if(!confirm("Bu fotoğraf silinsin mi?")) return;
     sb.storage.from(BUCKET).remove([f.p]).then(function(){});
-    mutateRow(hid,function(d){ d.anamnez.fotolar=(d.anamnez.fotolar||[]).filter(function(x){ return x.p!==f.p; }); });
+    mutateRow(hid,function(d){ d.anamnez[key]=(d.anamnez[key]||[]).filter(function(x){ return x.p!==f.p; }); });
     v.classList.remove("on");
   };
 }
@@ -1291,6 +1292,10 @@ function renderEditor(keepScroll){
   g2.appendChild(field("Özgeçmiş","ozgecmis","textarea",{a:1,cls:"half",rows:2}));
   g2.appendChild(field("Soygeçmiş","soygecmis","textarea",{a:1,cls:"half",rows:2}));
   g2.appendChild(field("İlaçlar","tedavi","textarea",{cls:"full",rows:3}));
+  var ifw=document.createElement("div"); ifw.style.gridColumn="1/-1";
+  var ifl=document.createElement("label"); ifl.textContent="İlaç fotoğrafları (tedavi kartı, reçete)"; ifw.appendChild(ifl);
+  ifw.appendChild(fotoBlok(draft.id,"ilac_fotolar",draft.anamnez.ilac_fotolar,true));
+  g2.appendChild(ifw);
   c2.appendChild(g2); wrap.appendChild(c2);
 
   /* muayene */
@@ -1437,7 +1442,7 @@ function renderEditor(keepScroll){
   g9.appendChild(field("Yapılan işlemler","islemler","textarea",{cls:"full",rows:3}));
   var fw=document.createElement("div"); fw.className="full"; fw.style.gridColumn="1/-1";
   var fl=document.createElement("label"); fl.textContent="Fotoğraflar (FTR kartı vb.)"; fw.appendChild(fl);
-  fw.appendChild(fotoBlok(draft.id,draft.anamnez.fotolar,true));
+  fw.appendChild(fotoBlok(draft.id,"fotolar",draft.anamnez.fotolar,true));
   g9.appendChild(fw);
   c5.appendChild(g9); wrap.appendChild(c5);
 
@@ -1580,7 +1585,7 @@ function queueSave(now){
 function removeRow(){
   if(!draft) return;
   if(!confirm("Bu hasta kaydı silinsin mi? Geri alınamaz.")) return;
-  var id=draft.id, fp=(draft.anamnez.fotolar||[]).map(function(f){ return f.p; });
+  var id=draft.id, fp=(draft.anamnez.fotolar||[]).concat(draft.anamnez.ilac_fotolar||[]).map(function(f){ return f.p; });
   if(fp.length && navigator.onLine){ try{ sb.storage.from(BUCKET).remove(fp); }catch(e){} }
   rows=rows.filter(function(n){ return n.id!==id; }); cacheSet(rows);
   obPush({op:"delete",id:id,ts:Date.now()});
@@ -1675,7 +1680,14 @@ function renderVizit(keep){
   sec("HİKAYE",a.hikaye);
   var oz=[a.ozgecmis?"Özgeçmiş: "+a.ozgecmis:"",a.soygecmis?"Soygeçmiş: "+a.soygecmis:""].filter(Boolean).join("\n");
   sec("ÖZGEÇMİŞ / SOYGEÇMİŞ",oz);
-  sec("İLAÇLAR",n.tedavi);
+  var ifz=(A(n).ilac_fotolar||[]);
+  if(n.tedavi || ifz.length){
+    var si2=document.createElement("section");
+    var ti2=document.createElement("h3"); ti2.textContent="İLAÇLAR"; si2.appendChild(ti2);
+    if(n.tedavi){ var pi2=document.createElement("p"); pi2.textContent=n.tedavi; si2.appendChild(pi2); }
+    if(ifz.length) si2.appendChild(fotoBlok(n.id,"ilac_fotolar",ifz,false));
+    w.appendChild(si2);
+  }
 
   var RLv=recs(prep(clone(n))), curR=RLv[RLv.length-1], prR=RLv.length>1?RLv[RLv.length-2]:null;
   var ms=muayeneSatirlari(curR);
@@ -1715,7 +1727,7 @@ function renderVizit(keep){
     var sy=document.createElement("section");
     var ty=document.createElement("h3"); ty.textContent="YAPILAN İŞLEMLER"; sy.appendChild(ty);
     if(n.islemler){ var py=document.createElement("p"); py.textContent=n.islemler; sy.appendChild(py); }
-    if(fz.length) sy.appendChild(fotoBlok(n.id,fz,false));
+    if(fz.length) sy.appendChild(fotoBlok(n.id,"fotolar",fz,false));
     w.appendChild(sy);
   }
   var k=(n.konsultasyonlar||[]).map(function(x){ return x.b+" ("+trDate(x.t)+"): "+(x.c||"cevap bekliyor"); }).join("\n\n");
